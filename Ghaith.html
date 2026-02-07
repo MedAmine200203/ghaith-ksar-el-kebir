@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>منصة غيث القصر الكبير | دعم المتضررين</title>
+    
+    <!-- مكتبة الخرائط Leaflet (بدون الحاجة لمفتاح API معقد) -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <!-- خط تجوال العربي -->
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --primary: #00897b; /* لون الغيث الأخضر المريح */
+            --primary-dark: #005b4f;
+            --accent: #ff6f00; /* برتقالي للتنبيهات */
+            --bg: #f4f7f6;
+            --white: #ffffff;
+            --text: #333333;
+            --gray: #777777;
+            --shadow: 0 4px 15px rgba(0,0,0,0.08);
+            --radius: 12px;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; outline: none; }
+        
+        body {
+            font-family: 'Tajawal', sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+            padding-bottom: 60px;
+        }
+
+        /* Header */
+        header {
+            background: var(--white);
+            padding: 1rem 5%;
+            box-shadow: var(--shadow);
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-size: 1.4rem;
+            font-weight: 800;
+            color: var(--primary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .nav-btn {
+            background: none;
+            border: none;
+            font-family: inherit;
+            font-size: 1rem;
+            padding: 0.5rem 1rem;
+            cursor: pointer;
+            color: var(--gray);
+            border-bottom: 2px solid transparent;
+            transition: 0.3s;
+        }
+
+        .nav-btn.active {
+            color: var(--primary);
+            border-bottom-color: var(--primary);
+            font-weight: 700;
+        }
+
+        /* Container */
+        .container {
+            max-width: 900px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+        }
+
+        /* Sections */
+        .section { display: none; animation: fadeIn 0.4s ease; }
+        .section.active { display: block; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* Cards */
+        .card {
+            background: var(--white);
+            padding: 2rem;
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            margin-bottom: 1.5rem;
+        }
+
+        h2 { color: var(--primary-dark); margin-bottom: 1.5rem; border-right: 4px solid var(--accent); padding-right: 1rem; }
+
+        /* Form Styling */
+        .form-group { margin-bottom: 1.2rem; }
+        label { display: block; margin-bottom: 0.5rem; font-weight: 600; font-size: 0.95rem; }
+        
+        input, select, textarea {
+            width: 100%;
+            padding: 0.8rem;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-family: inherit;
+            font-size: 1rem;
+            transition: 0.3s;
+        }
+
+        input:focus, select:focus, textarea:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(0,137,123,0.1);
+        }
+
+        .btn-gps {
+            background: #e0f2f1;
+            color: var(--primary-dark);
+            border: 1px solid var(--primary);
+            width: 100%;
+            padding: 0.8rem;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 5px;
+        }
+
+        .btn-gps:hover { background: #b2dfdb; }
+
+        .btn-submit {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 1rem;
+            width: 100%;
+            font-size: 1.1rem;
+            font-weight: bold;
+            border-radius: 8px;
+            cursor: pointer;
+            margin-top: 1rem;
+            transition: 0.3s;
+        }
+
+        .btn-submit:hover { background: var(--primary-dark); }
+
+        /* Map */
+        #map { height: 500px; width: 100%; border-radius: var(--radius); z-index: 1; }
+
+        /* Admin Table */
+        .table-responsive { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; min-width: 600px; }
+        th, td { padding: 1rem; text-align: right; border-bottom: 1px solid #eee; }
+        th { background: #f8f9fa; color: var(--primary-dark); }
+        
+        .toolbar {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .btn-export {
+            background: var(--text);
+            color: white;
+            border: none;
+            padding: 0.6rem 1.2rem;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+
+        /* Toast Notification */
+        #toast {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #333;
+            color: #fff;
+            padding: 12px 24px;
+            border-radius: 50px;
+            opacity: 0;
+            visibility: hidden;
+            transition: 0.3s;
+            z-index: 2000;
+        }
+        #toast.show { opacity: 1; visibility: visible; bottom: 50px; }
+
+        /* Popup Customization */
+        .leaflet-popup-content-wrapper { border-radius: 8px; font-family: 'Tajawal', sans-serif; }
+        .popup-row { display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 0.9rem; }
+        .popup-label { font-weight: bold; color: var(--gray); }
+
+        /* Responsive */
+        @media (max-width: 600px) {
+            header { flex-direction: column; gap: 1rem; }
+            .nav-btn { font-size: 0.9rem; padding: 0.5rem; }
+            #map { height: 350px; }
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="logo">
+            🌧️ غيث القصر الكبير
+        </div>
+        <nav>
+            <button class="nav-btn active" onclick="switchTab('form')">تسجيل متضرر</button>
+            <button class="nav-btn" onclick="switchTab('map')">خريطة المتضررين</button>
+            <button class="nav-btn" onclick="switchTab('admin')">الإدارة</button>
+        </nav>
+    </header>
+
+    <div class="container">
+        
+        <!-- 1. نموذج التسجيل -->
+        <section id="form-section" class="section active">
+            <div class="card">
+                <h2>📝 طلب مساعدة عاجل</h2>
+                <form id="aidForm">
+                    <div class="form-group">
+                        <label>الاسم الشخصي والعائلي</label>
+                        <input type="text" id="fullName" placeholder="مثال: محمد العلوي" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label>المكان الحالي / الحي</label>
+                        <input type="text" id="location" placeholder="اسم الحي أو المعلم البارز" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label>نوع المساعدة المطلوبة</label>
+                        <select id="aidType" required>
+                            <option value="مواد غذائية">مواد غذائية</option>
+                            <option value="مأوى">مأوى / إيواء</option>
+                            <option value="أدوية">أدوية أو مساعدة طبية</option>
+                            <option value="ملابس وأغطية">ملابس وأغطية</option>
+                            <option value="أخرى">أخرى</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group" id="otherAidGroup" style="display:none;">
+                        <label>توضيح نوع المساعدة</label>
+                        <input type="text" id="otherAidText" placeholder="اكتب التفاصيل هنا...">
+                    </div>
+
+                    <div class="form-group">
+                        <label>وصف الضرر</label>
+                        <textarea id="damageDesc" rows="3" placeholder="صف الضرر الذي لحق بك (مثال: غرق الطابق الأرضي، تضرر الأثاث...)" required></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label>تحديد الموقع الدقيق (GPS)</label>
+                        <div style="display: flex; gap: 10px;">
+                            <input type="text" id="gpsCoords" placeholder="الإحداثيات ( latitude, longitude )" readonly required>
+                            <button type="button" class="btn-gps" style="width: auto;" onclick="getGPS()">
+                                📍 تحديد موقعي
+                            </button>
+                        </div>
+                        <small style="color: var(--gray);">يستخدم هذا لظهرك على الخريطة وتسهيل وصول المساعدة.</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label>رقم الهاتف (للتواصل)</label>
+                        <input type="tel" id="phone" placeholder="06XXXXXXXX">
+                    </div>
+
+                    <div class="form-group">
+                        <label>رفع صور توثيقية (اختياري)</label>
+                        <input type="file" id="imageUpload" accept="image/*">
+                        <small style="color: var(--gray);">سيتم رفع الصور عند تفعيل السيرفر.</small>
+                    </div>
+
+                    <button type="submit" class="btn-submit">إرسال الطلب</button>
+                </form>
+            </div>
+        </section>
+
+        <!-- 2. الخريطة التفاعلية -->
+        <section id="map-section" class="section">
+            <div class="card">
+                <h2>🗺️ خريطة المتضررين</h2>
+                <p style="margin-bottom: 1rem; color: var(--gray);">النقاط الحمراء تشير إلى الحالات الحرجة، والزرقاء للحالات العادية.</p>
+                <div id="map"></div>
+            </div>
+        </section>
+
+        <!-- 3. لوحة الإدارة -->
+        <section id="admin-section" class="section">
+            <div class="card">
+                <h2>📊 لوحة تحكم المشرفين</h2>
+                
+                <div class="toolbar">
+                    <input type="text" id="searchInput" placeholder="بحث بالاسم أو المكان..." onkeyup="renderTable()" style="max-width: 300px;">
+                    <select id="filterAid" onchange="renderTable()" style="max-width: 200px;">
+                        <option value="all">كل أنواع المساعدة</option>
+                        <option value="مواد غذائية">مواد غذائية</option>
+                        <option value="مأوى">مأوى</option>
+                        <option value="أدوية">أدوية</option>
+                    </select>
+                    <button class="btn-export" onclick="exportToCSV()">⬇ تصدير CSV</button>
+                </div>
+
+                <div class="table-responsive">
+                    <table id="adminTable">
+                        <thead>
+                            <tr>
+                                <th>الاسم</th>
+                                <th>المكان</th>
+                                <th>المساعدة</th>
+                                <th>الضرر</th>
+                                <th>الهاتف</th>
+                                <th>الإحداثيات</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- سيتم ملء البيانات هنا -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+    </div>
+
+    <div id="toast">تم إرسال طلبك بنجاح!</div>
+
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+
+    <script>
+        // ==========================================
+        // إعدادات قاعدة البيانات
+        // ==========================================
+        
+        // ⚠️ هام: قم بتغيير هذا المتغير إلى true بعد وضع مفاتيح Firebase الخاصة بك
+        const useRealDatabase = false; 
+
+        // ضع إعدادات Firebase هنا (انسخها من Console -> Project Settings)
+        const firebaseConfig = {
+            apiKey: "AIzaSyD-XXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+            authDomain: "your-project.firebaseapp.com",
+            projectId: "your-project",
+            storageBucket: "your-project.appspot.com",
+            messagingSenderId: "123456789",
+            appId: "1:123456789:web:abcdef"
+        };
+
+        // تهيئة Firebase
+        let db;
+        if (useRealDatabase) {
+            firebase.initializeApp(firebaseConfig);
+            db = firebase.firestore();
+        }
+
+        // ==========================================
+        // إدارة الحالة (State Management)
+        // ==========================================
+        let map;
+        let markers = [];
+        let allData = []; // لتخزين البيانات محلياً للعرض والبحث
+
+        // عند فتح "أخرى" في نوع المساعدة
+        document.getElementById('aidType').addEventListener('change', function() {
+            const otherGroup = document.getElementById('otherAidGroup');
+            otherGroup.style.display = this.value === 'أخرى' ? 'block' : 'none';
+        });
+
+        // ==========================================
+        // الوظائف الأساسية
+        // ==========================================
+
+        function switchTab(tabId) {
+            // إخفاء جميع الأقسام
+            document.querySelectorAll('.section').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
+            
+            // إظهار القسم المطلوب
+            document.getElementById(tabId + '-section').classList.add('active');
+            document.querySelector(`.nav-btn[onclick="switchTab('${tabId}')"]`).classList.add('active');
+
+            // إذا فتحنا الخريطة أو الإدارة، نحدث البيانات
+            if (tabId === 'map') {
+                setTimeout(initMap, 100); // تأخير بسيط لضمان ظهور العنصر
+            } else if (tabId === 'admin') {
+                renderTable();
+            }
+        }
+
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            toast.textContent = msg;
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 3000);
+        }
+
+        // تحديد الموقع (GPS)
+        function getGPS() {
+            const input = document.getElementById('gpsCoords');
+            if (navigator.geolocation) {
+                input.value = "جاري التحديد...";
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        const lat = position.coords.latitude.toFixed(5);
+                        const lng = position.coords.longitude.toFixed(5);
+                        input.value = `${lat}, ${lng}`;
+                    },
+                    (error) => {
+                        input.value = "";
+                        alert("تعذر تحديد الموقع. يرجى تفعيل خدمة الموقع أو كتابته يدوياً.");
+                    }
+                );
+            } else {
+                alert("المتصفح لا يدعم تحديد الموقع.");
+            }
+        }
+
+        // ==========================================
+        // التعامل مع قاعدة البيانات
+        // ==========================================
+
+        // إرسال النموذج
+        document.getElementById('aidForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const aidType = document.getElementById('aidType').value;
+            const finalAidType = aidType === 'أخرى' ? document.getElementById('otherAidText').value : aidType;
+            const gpsText = document.getElementById('gpsCoords').value;
+            
+            // تحويل GPS إلى أرقام
+            let lat = null, lng = null;
+            if (gpsText.includes(',')) {
+                const parts = gpsText.split(',');
+                lat = parseFloat(parts[0].trim());
+                lng = parseFloat(parts[1].trim());
+            }
+
+            const newRequest = {
+                name: document.getElementById('fullName').value,
+                location: document.getElementById('location').value,
+                aidType: finalAidType,
+                damage: document.getElementById('damageDesc').value,
+                phone: document.getElementById('phone').value,
+                gps: { lat, lng },
+                timestamp: new Date().toISOString()
+            };
+
+            if (useRealDatabase) {
+                // حفظ في Firebase
+                try {
+                    await db.collection('requests').add(newRequest);
+                    showToast("تم إرسال الطلب بنجاح!");
+                    e.target.reset();
+                } catch (error) {
+                    console.error("Error adding document: ", error);
+                    alert("حدث خطأ أثناء الإرسال.");
+                }
+            } else {
+                // حفظ محلي (محاكاة)
+                const localData = JSON.parse(localStorage.getItem('ghaith_data') || '[]');
+                newRequest.id = Date.now(); // معرف وهمي
+                localData.push(newRequest);
+                localStorage.setItem('ghaith_data', JSON.stringify(localData));
+                showToast("تم الإرسال (وضع المحاكاة)!");
+                e.target.reset();
+            }
+        });
+
+        // جلب البيانات
+        async function fetchData() {
+            if (useRealDatabase) {
+                try {
+                    const snapshot = await db.collection('requests').get();
+                    allData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                } catch (e) {
+                    console.error(e);
+                }
+            } else {
+                // محاكاة البيانات + بيانات تجريبية
+                let data = JSON.parse(localStorage.getItem('ghaith_data') || '[]');
+                if(data.length === 0) {
+                    // بيانات وهمية للخريطة عند التجربة الأولى
+                    data = [
+                        {name: "أحمد المديني", location: "حي السلام", aidType: "مأوى", damage: "غرق كامل", phone: "0611111111", gps: {lat: 35.05, lng: -5.90}},
+                        {name: "فاطمة الزهراء", location: "مركز المدينة", aidType: "مواد غذائية", damage: "تضرر جزئي", phone: "0622222222", gps: {lat: 35.06, lng: -5.91}}
+                    ];
+                }
+                allData = data;
+            }
+        }
+
+        // ==========================================
+        // الخريطة (Leaflet.js)
+        // ==========================================
+        async function initMap() {
+            await fetchData();
+
+            if (!map) {
+                // إعداد الخريطة (تتمحور حول القصر الكبير تقريباً)
+                map = L.map('map').setView([35.062, -5.905], 13);
+                
+                // استخدام OpenStreetMap (مجاني)
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap contributors'
+                }).addTo(map);
+            }
+
+            // مسح العلامات القديمة
+            markers.forEach(m => map.removeLayer(m));
+            markers = [];
+
+            // إضافة العلامات الجديدة
+            allData.forEach(item => {
+                if (item.gps && item.gps.lat && item.gps.lng) {
+                    const markerColor = item.damage.includes('كلي') || item.aidType === 'مأوى' ? 'red' : 'blue';
+                    
+                    // استخدام أيقونة بسيطة
+                    const marker = L.marker([item.gps.lat, item.gps.lng])
+                        .addTo(map)
+                        .bindPopup(`
+                            <div class="popup-content">
+                                <h3 style="margin:0 0 8px 0; color:var(--primary)">${item.name}</h3>
+                                <div class="popup-row"><span class="popup-label">المساعدة:</span> <span>${item.aidType}</span></div>
+                                <div class="popup-row"><span class="popup-label">المكان:</span> <span>${item.location}</span></div>
+                                <div class="popup-row"><span class="popup-label">الضرر:</span> <span>${item.damage}</span></div>
+                                ${item.phone ? `<div class="popup-row"><span class="popup-label">الهاتف:</span> <a href="tel:${item.phone}">${item.phone}</a></div>` : ''}
+                            </div>
+                        );
+                    markers.push(marker);
+                }
+            });
+        }
+
+        // ==========================================
+        // لوحة التحكم
+        // ==========================================
+        async function renderTable() {
+            await fetchData();
+
+            const tbody = document.querySelector('#adminTable tbody');
+            const search = document.getElementById('searchInput').value.toLowerCase();
+            const filter = document.getElementById('filterAid').value;
+
+            tbody.innerHTML = '';
+
+            const filteredData = allData.filter(item => {
+                const matchesSearch = item.name.toLowerCase().includes(search) || item.location.toLowerCase().includes(search);
+                const matchesFilter = filter === 'all' || item.aidType === filter;
+                return matchesSearch && matchesFilter;
+            });
+
+            filteredData.forEach(item => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${item.name}</td>
+                    <td>${item.location}</td>
+                    <td><span style="background:#e0f2f1; padding:2px 8px; border-radius:4px; font-size:0.85rem; color:var(--primary-dark)">${item.aidType}</span></td>
+                    <td>${item.damage}</td>
+                    <td>${item.phone || '-'}</td>
+                    <td>${item.gps && item.gps.lat ? `${item.gps.lat}, ${item.gps.lng}` : '-'}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function exportToCSV() {
+            // تحويل البيانات إلى صيغة CSV
+            const headers = ['الاسم', 'المكان', 'المساعدة', 'الضرر', 'الهاتف', 'الإحداثيات'];
+            const rows = allData.map(item => [
+                `"${item.name}"`,
+                `"${item.location}"`,
+                `"${item.aidType}"`,
+                `"${item.damage}"`,
+                `"${item.phone}"`,
+                `"${item.gps ? item.gps.lat + ',' + item.gps.lng : ''}"`
+            ]);
+
+            const csvContent = "data:text/csv;charset=utf-8,\uFEFF" 
+                + headers.join(",") + "\n" 
+                + rows.map(e => e.join(",")).join("\n");
+
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", "Ghaith_Victims_Data.csv");
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+    </script>
+</body>
+</html>
